@@ -1,0 +1,18 @@
+version: "3.3"
+
+services:
+  db:
+    image: mariadb:latest
+    restart: on-failure
+    environment:
+      MARIADB_DATABASE: widoo
+      MARIADB_USER: widoo
+      MARIADB_PASSWORD: widoo
+      MARIADB_ROOT_PASSWORD: root
+    ports:
+      - 3306:3306
+    volumes:
+      - database:/var/lib/mysql
+
+volumes:
+  database:
