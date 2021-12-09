@@ -1,6 +1,6 @@
 {
   "name": "widoo-back",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The backend server for the widoo application",
   "main": "app.js",
   "scripts": {

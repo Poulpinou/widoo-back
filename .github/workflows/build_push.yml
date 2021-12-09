@@ -49,8 +49,3 @@ jobs:
       - name: Push docker image
         run: |
           docker push ${IMAGE_TAG}
-
-      - name: Push as latest
-        if: github.ref == 'refs/heads/master'
-        run: |
-          docker push ${{ env.DOCKER_HUB_REPO }}:latest
