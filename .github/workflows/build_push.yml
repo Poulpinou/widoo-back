@@ -1,0 +1,51 @@
+name: "Build & Push"
+
+on:
+  push:
+    branches:
+      - 'master'
+      - 'release/*'
+      - 'develop'
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_HUB_REPO: dodoworkshop/widoo-back
+      DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+      DOCKER_HUB_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v1
+
+      - name: Setup Node
+        uses: actions/setup-node@v2
+
+      - name: Get project version
+        run: |
+          echo "IMAGE_VERSION=$( node -p "require('./package.json').version" )" >> $GITHUB_ENV
+
+      - name: Add RELEASE for release branch
+        if: startsWith(github.ref, 'refs/heads/release')
+        run: |
+          IMAGE_VERSION=${{ env.IMAGE_VERSION }}-RELEASE
+          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> $GITHUB_ENV
+
+      - name: Add custom tag for develop branch
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          IMAGE_VERSION=develop
+          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> $GITHUB_ENV
+
+      - name: Connect to Docker Hub
+        run: docker login -u ${DOCKER_HUB_USERNAME} -p ${DOCKER_HUB_PASSWORD}
+
+      - name: Build docker image
+        run: |
+          IMAGE_TAG=${{ env.DOCKER_HUB_REPO }}:${{ env.IMAGE_VERSION }}
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+          docker build -t ${IMAGE_TAG} .
+
+      - name: Push docker image
+        run: |
+          docker push ${IMAGE_TAG}
