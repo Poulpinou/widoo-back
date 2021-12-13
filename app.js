@@ -62,6 +62,7 @@ const migrateDatabase = (next) => {
 
             db.query(
                 sql.toString(),
+                null,
                 (err, res) => {
                     if (err) {
                         console.log("Migrations failed")
@@ -129,7 +130,7 @@ app.use((req, res, next) => {
 
 app.get('/activities/random', (req, res, next) => {
     db.query(
-        "SELECT * FROM activities AS a WHERE a.done = 0 ORDER BY RAND () LIMIT 1",
+        "SELECT * FROM activities AS a WHERE a.endDate IS NULL ORDER BY RAND () LIMIT 1",
         (err, results) => {
             if (err) return next(err);
 
@@ -142,9 +143,19 @@ app.get('/activities/random', (req, res, next) => {
     );
 })
 
+app.get('/activities/history', (req, res, next) => {
+    db.query(
+        "SELECT * FROM activities AS a WHERE a.endDate IS NOT NULL ORDER BY a.endDate DESC",
+        (err, results) => {
+            if (err) return next(err);
+            res.status(200).json(results);
+        }
+    );
+})
+
 app.get('/activities/count', (req, res, next) => {
     db.query(
-        "SELECT COUNT(*) as total FROM activities;",
+        "SELECT COUNT(*) as total FROM activities",
         (err, results) => {
             if (err) return next(err);
             res.status(200).json(results[0]);
@@ -174,7 +185,7 @@ app.put('/activities/:id/done', (req, res, next) => {
     const activityId = parseInt(req.params.id);
 
     db.query(
-        "UPDATE activities AS a SET a.done = 1 WHERE a.id = ?",
+        "UPDATE activities AS a SET a.endDate = now() WHERE a.id = ?",
         activityId,
         (err) => {
             if (err) return next(err);
@@ -219,15 +230,15 @@ app.post('/activities', (req, res, next) => {
             .json({
                 type: "INVALID_INPUT",
                 field: "description",
-                message: "La description doit contenir au maximum 255 charactères"
+                message: "La description doit contenir au maximum 2048 charactères"
             })
     } else {
         // Save data
         db.query(
             "INSERT INTO activities(name, description, repeatable) VALUES (?, ?, ?)",
             [
-                db.escape(activity.name),
-                db.escape(activity.description),
+                activity.name,
+                activity.description,
                 activity.repeatable ? 1 : 0
             ],
             (err) => {
@@ -240,7 +251,7 @@ app.post('/activities', (req, res, next) => {
 })
 
 //----- Error handling ------//
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
     console.error(err.stack);
     res.status(500).send({error: err});
 })
@@ -257,6 +268,7 @@ process.on('SIGINT', () => {
 
 
 //----- Start server -----//
+console.log("Starting Widoo...")
 connectDatabase(() =>
     startServer()
 )
