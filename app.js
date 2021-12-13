@@ -17,10 +17,21 @@ const {
 
     // Security
     APPLICATION_KEY = "mostSecretKeyEver",
+    APPLICATION_KEY_HEADER = "application-key",
 
     // Logs
     LOG_REQUESTS = false
 } = process.env;
+
+
+//----- Logs -----//
+require('log-prefix')(() => {
+    const today = new Date();
+    const date = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
+    const time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
+
+    return '[' + date + ' ' + time + '] %s'
+});
 
 
 //----- Database -----//
@@ -42,10 +53,10 @@ const db = mysql.createConnection({
 const connectDatabase = (next) => {
     db.connect((err) => {
         if (err) {
-            console.log("Connection to database failed")
+            console.info("Connection to database failed")
             throw err;
         }
-        console.log("Connected to database");
+        console.info("Connected to database");
 
         migrateDatabase(next)
     });
@@ -56,7 +67,7 @@ const migrateDatabase = (next) => {
         'init_database.sql',
         (err, sql) => {
             if (err) {
-                console.log("Failed to load sql file")
+                console.info("Failed to load sql file")
                 throw err;
             }
 
@@ -65,25 +76,16 @@ const migrateDatabase = (next) => {
                 null,
                 (err, res) => {
                     if (err) {
-                        console.log("Migrations failed")
+                        console.info("Migrations failed")
                         throw err;
                     }
-                    console.log("Migrations done");
+                    console.info("Migrations done");
 
                     next?.();
                 }
             );
         }
     )
-}
-
-
-//----- Utils -----//
-const currentDate = () => {
-    const today = new Date();
-    const date = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
-    const time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
-    return date + ' ' + time;
 }
 
 
@@ -95,26 +97,27 @@ const startServer = () => {
     app.listen(
         SERVER_PORT,
         () => {
-            console.log("Server started on port " + SERVER_PORT);
+            console.info("Server started on port %s", SERVER_PORT);
         }
     )
 }
 
+
 //----- Routes -----//
 // Reject if invalid application key
 app.use((req, res, next) => {
-    const applicationKey = req.headers["application-key"];
+    const applicationKey = req.headers[APPLICATION_KEY_HEADER];
     if (applicationKey) {
         // Reject if the provided key is not matching
         if (applicationKey !== APPLICATION_KEY) {
-            console.log("Tried to request app with an invalid application key")
+            console.warn("%s tried to request app with an invalid application key: %s", req.socket.remoteAddress, applicationKey)
             return res.status(401).send({error: "Invalid access key"});
         }
         // Continue if okay
         else {
             // Log request if enabled
             if (LOG_REQUESTS) {
-                console.log("[" + currentDate() + "] " + req.method + " " + req.url + " " + (req.body ? JSON.stringify(req.body) : ""))
+                console.info("%s %s %s", req.method, req.url, JSON.stringify(req.body));
             }
 
             // Continue
@@ -123,8 +126,8 @@ app.use((req, res, next) => {
     }
     // Reject if no application key
     else {
-        console.log("Tried to request app without application key")
-        return res.status(401).send();
+        console.warn("%s tried to request app without application key", req.socket.remoteAddress)
+        return res.status(401).send({error: "The header " + APPLICATION_KEY_HEADER + " has to be provided"});
     }
 })
 
@@ -225,7 +228,7 @@ app.post('/activities', (req, res, next) => {
                 field: "name",
                 message: "Le nom doit contenir au maximum 62 charactères"
             })
-    } else if (activity.description.length > 255) {
+    } else if (activity.description.length > 2048) {
         res.status(400)
             .json({
                 type: "INVALID_INPUT",
@@ -261,14 +264,14 @@ app.use((err, req, res) => {
 process.on('SIGINT', () => {
     console.info('Stop signal received');
     db.end(false, () => {
-        console.log('Database connection closed');
+        console.info('Database connection closed');
         process.exit(0);
     });
 });
 
 
 //----- Start server -----//
-console.log("Starting Widoo...")
+console.info("Starting Widoo...")
 connectDatabase(() =>
     startServer()
 )
