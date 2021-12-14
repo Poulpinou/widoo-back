@@ -157,8 +157,14 @@ app.get('/activities/history', (req, res, next) => {
 })
 
 app.get('/activities/count', (req, res, next) => {
+    const query = "SELECT \n" +
+        "COUNT(*) AS total,\n" +
+        "SUM(CASE WHEN a.endDate IS NULL THEN 1 ELSE 0 END) AS active,\n" +
+        "SUM(CASE WHEN a.endDate IS NOT NULL THEN 1 ELSE 0 END) AS done\n" +
+        "FROM activities a;"
+
     db.query(
-        "SELECT COUNT(*) as total FROM activities",
+        query,
         (err, results) => {
             if (err) return next(err);
             res.status(200).json(results[0]);
