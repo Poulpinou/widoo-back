@@ -21,6 +21,7 @@ Simple backend server for the Widoo application.
 | Name | Required | Description | Default value |
 |:----:|:--------:|:-----------:|:--------------|
 | APPLICATION_KEY | false | The application key that should be provided by the frontend application | mostSecretKeyEver |
+| APPLICATION_KEY_HEADER | false | The name of the application key header | application-key |
 
 ## Logs
 | Name | Required | Description | Default value |

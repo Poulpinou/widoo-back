@@ -1,6 +1,6 @@
 {
   "name": "widoo-back",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "The backend server for the widoo application",
   "main": "app.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.17.1",
+    "log-prefix": "^0.1.1",
     "mysql": "^2.18.1"
   }
 }
