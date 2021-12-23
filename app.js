@@ -23,6 +23,7 @@ const {
     LOG_REQUESTS = false
 } = process.env;
 
+const MIGRATIONS_DIRECTORY_PATH = 'db/migrations';
 
 //----- Logs -----//
 require('log-prefix')(() => {
@@ -53,7 +54,7 @@ const db = mysql.createConnection({
 const connectDatabase = (next) => {
     db.connect((err) => {
         if (err) {
-            console.info("Connection to database failed")
+            console.error("Connection to database failed")
             throw err;
         }
         console.info("Connected to database");
@@ -63,31 +64,54 @@ const connectDatabase = (next) => {
 }
 
 const migrateDatabase = (next) => {
-    fs.readFile(
-        'init_database.sql',
-        (err, sql) => {
+    console.info("Starting migrations");
+
+    fs.readdir(
+        MIGRATIONS_DIRECTORY_PATH,
+        (err, migrationDir) => {
             if (err) {
-                console.info("Failed to load sql file")
+                console.error("Failed to load migration directory")
                 throw err;
             }
 
-            db.query(
-                sql.toString(),
-                null,
-                (err, res) => {
-                    if (err) {
-                        console.info("Migrations failed")
-                        throw err;
-                    }
+            migrateFiles(migrationDir)
+                .then(() => {
                     console.info("Migrations done");
-
                     next?.();
-                }
-            );
+                })
         }
     )
 }
 
+const migrateFiles = async (files) => {
+    for (const file of files) {
+        await new Promise((resolve => migrateFile(file, resolve)));
+    }
+}
+
+const migrateFile = (fileName, callback) => fs.readFile(
+    MIGRATIONS_DIRECTORY_PATH + '/' + fileName,
+    (err, sql) => {
+        if (err) {
+            console.error("Failed to load sql file: " + fileName)
+            throw err;
+        }
+
+        db.query(
+            sql.toString(),
+            null,
+            (err, res) => {
+                if (err) {
+                    console.error("Failed to apply " + fileName)
+                    throw err;
+                }
+                console.info(fileName + " migrated");
+
+                callback?.();
+            }
+        );
+    }
+)
 
 //----- Server -----//
 const app = express();
@@ -172,36 +196,6 @@ app.get('/activities/count', (req, res, next) => {
     );
 })
 
-app.get('/activities/:id', (req, res, next) => {
-    const activityId = parseInt(req.params.id);
-
-    db.query(
-        "SELECT * FROM activities WHERE id = ?",
-        [activityId],
-        (err, results) => {
-            if (err) return next(err);
-
-            if (results.length === 0) {
-                res.status(404).json();
-            } else {
-                res.status(200).json(results[0]);
-            }
-        }
-    )
-})
-
-app.put('/activities/:id/done', (req, res, next) => {
-    const activityId = parseInt(req.params.id);
-
-    db.query(
-        "UPDATE activities AS a SET a.endDate = now() WHERE a.id = ?",
-        activityId,
-        (err) => {
-            if (err) return next(err);
-            res.status(200).json();
-        }
-    )
-})
 
 app.post('/activities', (req, res, next) => {
     // Read body
@@ -259,14 +253,119 @@ app.post('/activities', (req, res, next) => {
     }
 })
 
-//----- Error handling ------//
-app.use((err, req, res) => {
-    console.error(err.stack);
-    res.status(500).send({error: err});
+app.get('/activities/selected', (req, res, next) => {
+    db.query(
+        "SELECT * FROM activities a WHERE a.selected = 1",
+        [],
+        (err, results) => {
+            if (err) return next(err);
+
+            if (results.length === 0) {
+                res.status(404).json();
+            } else {
+                res.status(200).json(results[0]);
+            }
+        }
+    )
+})
+
+app.post('/activities/:id/select', (req, res, next) => {
+    const activityId = parseInt(req.params.id);
+
+    db.query(
+        "UPDATE activities AS a SET a.selected = IF(a.id = ?, 1, 0) ",
+        activityId,
+        (err) => {
+            if (err) return next(err);
+            res.status(200).json();
+        }
+    )
+})
+
+app.post('/activities/:id/repeat', (req, res, next) => {
+    const activityId = parseInt(req.params.id);
+
+    // Get activity
+    db.query(
+        "SELECT * FROM activities WHERE id = ?",
+        [activityId],
+        (err, results) => {
+            if (err) return next(err);
+
+            // Store activity
+            const activity = results[0];
+
+            // End activity
+            db.query(
+                "UPDATE activities AS a SET a.endDate = now(), a.selected = 0 WHERE a.id = ?",
+                [activityId],
+                (err) => {
+                    if (err) return next(err);
+
+                    // Replicate initial activity
+                    db.query(
+                        "INSERT INTO activities(name, description, repeatable) VALUES (?, ?, ?)",
+                        [
+                            activity.name,
+                            activity.description,
+                            activity.repeatable ? 1 : 0
+                        ],
+                        (err) => {
+                            if (err) return next(err);
+
+                            res.status(200).json();
+                        }
+                    );
+                }
+            )
+        }
+    )
+})
+
+app.put('/activities/:id/done', (req, res, next) => {
+    const activityId = parseInt(req.params.id);
+
+    db.query(
+        "UPDATE activities AS a SET a.endDate = now(), a.selected = 0 WHERE a.id = ?",
+        activityId,
+        (err) => {
+            if (err) return next(err);
+            res.status(200).json();
+        }
+    )
+})
+
+app.get('/activities/:id', (req, res, next) => {
+    const activityId = parseInt(req.params.id);
+
+    db.query(
+        "SELECT * FROM activities WHERE id = ?",
+        [activityId],
+        (err, results) => {
+            if (err) return next(err);
+
+            if (results.length === 0) {
+                res.status(404).json();
+            } else {
+                res.status(200).json(results[0]);
+            }
+        }
+    )
+})
+
+app.use((req, res, next) => {
+    return res.status(404).json({error: 'Not found'});
 })
 
 
-//----- Add stop listeners -----//
+//----- Error handling ------//
+app.use((err, req, res) => {
+    console.error(err.stack);
+    return res.status(500).json({error: err});
+})
+
+
+//----- Add process listeners -----//
 process.on('SIGINT', () => {
     console.info('Stop signal received');
     db.end(false, () => {
@@ -274,6 +373,10 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
+
+process.on('ECONNRESET', () => {
+    console.info('Connection reseated');
+})
 
 
 //----- Start server -----//
